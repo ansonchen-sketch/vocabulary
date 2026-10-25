@@ -17,7 +17,7 @@
   --ink:#101A33; --ink-soft:#55617E; --line:#D3DBEB; --edge:#101A33;
   --blue:#2D55E8; --blue-ink:#FFFFFF;
   --marker:#FFD84A; --marker-ink:#2A2200;
-  --good:#0E6B4A; --good-bg:#DCF2E7; --bad:#C3342C; --bad-bg:#FADFDC;
+  --good:#0E6B4A; --good-bg:#DCF2E7; --bad:#C3342C; --bad-bg:#FADFDC; --fill:#BDE5D0;
   --font-display:'Bricolage Grotesque','Noto Sans TC',system-ui,sans-serif;
   --font-body:'Noto Sans TC',system-ui,-apple-system,'PingFang TC','Microsoft JhengHei',sans-serif;
   --font-mono:'JetBrains Mono',ui-monospace,Menlo,Consolas,monospace;
@@ -28,7 +28,7 @@
     --ink:#E8EDFA; --ink-soft:#9DA9C8; --line:#2A3757; --edge:#475A8C;
     --blue:#86A2FF; --blue-ink:#0C1325;
     --marker:#6A5810; --marker-ink:#FFEBA8;
-    --good:#52CF98; --good-bg:#12382B; --bad:#FF8C84; --bad-bg:#43201F;
+    --good:#52CF98; --good-bg:#12382B; --bad:#FF8C84; --bad-bg:#43201F; --fill:#1F5A44;
     color-scheme:dark;
   }
 }
@@ -37,7 +37,7 @@
   --ink:#E8EDFA; --ink-soft:#9DA9C8; --line:#2A3757; --edge:#475A8C;
   --blue:#86A2FF; --blue-ink:#0C1325;
   --marker:#6A5810; --marker-ink:#FFEBA8;
-  --good:#52CF98; --good-bg:#12382B; --bad:#FF8C84; --bad-bg:#43201F;
+  --good:#52CF98; --good-bg:#12382B; --bad:#FF8C84; --bad-bg:#43201F; --fill:#1F5A44;
   color-scheme:dark;
 }
 *{box-sizing:border-box}
@@ -124,10 +124,17 @@ button{font-family:inherit}
 .chip:hover{border-color:var(--ink-soft)}
 .chip[aria-pressed="true"]{background:var(--blue);color:var(--blue-ink);border-color:var(--blue)}
 .chip small{font-family:var(--font-mono);font-size:12px;font-weight:700;background:var(--marker);color:var(--marker-ink);border-radius:99px;padding:0 7px;margin-left:8px}
+.chips.units{max-height:340px;overflow-y:auto;padding:3px;margin:-3px}
+.chip.uchip{display:inline-flex;align-items:center;gap:8px;border-radius:8px;background:linear-gradient(90deg,var(--fill) var(--p),var(--card) var(--p))}
+.chip.uchip small{margin-left:0}
+.chip.uchip .un{min-width:0}
+.chip.uchip .pc{font-family:var(--font-mono);font-size:12px;color:var(--ink-soft)}
+.chip.uchip[aria-pressed="true"]{background:linear-gradient(90deg,var(--fill) var(--p),var(--card) var(--p));color:var(--ink);border-color:var(--blue);box-shadow:inset 0 0 0 1.5px var(--blue);font-weight:700}
+.chip.uchip[aria-pressed="true"] .un::before{content:"✓ ";color:var(--blue)}
 .subhead{font-size:14px;color:var(--ink-soft);margin:16px 0 8px}
 .subhead:first-of-type{margin-top:0}
 .startbar{display:flex;align-items:center;gap:14px;flex-wrap:wrap}
-.foot{display:flex;justify-content:flex-end}
+.foot{display:flex;justify-content:flex-end;gap:8px;flex-wrap:wrap}
 
 /* play */
 .hud{display:flex;align-items:center;gap:12px;flex-wrap:wrap}
@@ -238,6 +245,7 @@ var importOpen=false, notice=null, clearArm=false, clearTimer=null;
 var game=null;
 var NBKEY='vocab-notebook-v1';
 var nb={}, nbClearArm=false, nbClearTimer=null;
+var LVKEY='vocab-level-v1', lv={}, lvArm=false, lvTimer=null;
 
 function $(s){return document.querySelector(s)}
 function esc(s){return String(s).replace(/[&<>"']/g,function(c){return {'&':'&amp;','<':'&lt;','>':'&gt;','"':'&quot;',"'":'&#39;'}[c]})}
@@ -255,12 +263,20 @@ function saveBank(){try{localStorage.setItem(KEY,JSON.stringify(bank))}catch(e){
 function keyOf(it){return (it.w+'|'+it.pos+'|'+it.zh+'|'+it.unit).toLowerCase()}
 function loadNb(){try{var r=localStorage.getItem(NBKEY);if(r){var o=JSON.parse(r);if(o&&typeof o==='object'&&!Array.isArray(o))nb=o}}catch(e){}}
 function saveNb(){try{localStorage.setItem(NBKEY,JSON.stringify(nb))}catch(e){}}
+/* familiarity: each word has a level 0-3 (+1 per correct answer, back to 0 on a miss); unit % = sum of levels / (3 x words) */
+function loadLv(){try{var r=localStorage.getItem(LVKEY);if(r){var o=JSON.parse(r);if(o&&typeof o==='object'&&!Array.isArray(o))lv=o}}catch(e){}}
+function saveLv(){try{localStorage.setItem(LVKEY,JSON.stringify(lv))}catch(e){}}
+function familiarity(list){if(!list||!list.length)return 0;var t=0;list.forEach(function(x){t+=(lv[keyOf(x)]||0)});return Math.round(t/(3*list.length)*100)}
+function unitChip(attrs,label,count,pct,on){
+  return '<button class="chip uchip" type="button" '+attrs+' aria-pressed="'+on+'" style="--p:'+pct+'%" title="熟悉度 '+pct+'%"><span class="un">'+label+'</span><small>'+count+'</small><span class="pc">'+pct+'%</span></button>';
+}
 /* wrong-answer notebook: a miss puts the word in with need=3; each later correct answer lowers need; at 0 it leaves */
 function record(it,ok){
   var k=keyOf(it),r=nb[k];
+  lv[k]=ok?Math.min(3,(lv[k]||0)+1):0;
   if(!ok){nb[k]={miss:(r?r.miss:0)+1,need:3,t:Date.now()}}
   else if(r){r.need--;if(r.need<=0)delete nb[k]}
-  saveNb();
+  saveNb();saveLv();
 }
 function notebookEntries(){
   var seen=new Set(),out=[];
@@ -324,7 +340,7 @@ function finishImport(parsed){
   });
   base.forEach(function(x,i){x.id=i});
   bank=base;cfg.units=new Set();saveBank();importOpen=false;
-  if(mode==='replace'){var ks=new Set(bank.map(keyOf));Object.keys(nb).forEach(function(k){if(!ks.has(k))delete nb[k]});saveNb()}
+  if(mode==='replace'){var ks=new Set(bank.map(keyOf));Object.keys(nb).forEach(function(k){if(!ks.has(k))delete nb[k]});Object.keys(lv).forEach(function(k){if(!ks.has(k))delete lv[k]});saveNb();saveLv()}
   var t='已'+(mode==='replace'?'匯入 ':'加入 ')+added+' 個單字，題庫共 '+bank.length+' 字、'+unitList().length+' 個單元。';
   if(parsed.skipped)t+=' 有 '+parsed.skipped+' 列缺少單字或中文，已略過。';
   if(dup)t+=' 有 '+dup+' 筆和題庫完全相同的資料（單字、詞性、中文、單元都一樣），已略過。';
@@ -389,12 +405,13 @@ function configPanel(){
   MODES.forEach(function(m){
     h+='<button class="mode" type="button" data-act="mode" data-mode="'+m.id+'" aria-pressed="'+(cfg.mode===m.id)+'"><span class="mtag">'+esc(m.tag)+'</span><span><span class="mname">'+esc(m.name)+'</span><span class="mdesc">'+esc(m.desc)+'</span></span></button>';
   });
-  h+='</div></section><section class="panel"><h2>範圍與題數</h2><p class="subhead">單元（可複選）</p><div class="chips">';
-  h+='<button class="chip" type="button" data-act="unit-all" aria-pressed="'+(cfg.units.size===0)+'">全部<small>'+bank.length+'</small></button>';
+  h+='</div></section><section class="panel"><h2>範圍與題數</h2><p class="subhead">單元（可複選）</p><p class="hint" style="margin-bottom:10px">底色越滿代表越熟悉：每個單字答對一次累積三分之一，答對 3 次算完全熟悉，答錯會歸零。閃卡不列入計算。</p><div class="chips units">';
+  var byU=new Map();bank.forEach(function(x){if(!byU.has(x.unit))byU.set(x.unit,[]);byU.get(x.unit).push(x)});
+  h+=unitChip('data-act="unit-all"','全部',bank.length,familiarity(bank),cfg.units.size===0);
   units.forEach(function(u){
-    h+='<button class="chip" type="button" data-act="unit" data-unit="'+esc(u[0])+'" aria-pressed="'+cfg.units.has(u[0])+'">'+esc(u[0])+'<small>'+u[1]+'</small></button>';
+    h+=unitChip('data-act="unit" data-unit="'+esc(u[0])+'"',esc(u[0]),u[1],familiarity(byU.get(u[0])),cfg.units.has(u[0]));
   });
-  h+='</div><p class="subhead">題數　已選範圍共 '+p.length+' 個單字</p><div class="seg" role="group" aria-label="題數">';
+  h+='</div><p class="subhead">題數　已選範圍共 '+p.length+' 個單字，熟悉度 '+familiarity(p)+'%</p><div class="seg" role="group" aria-label="題數">';
   [10,20,'all'].forEach(function(l){
     h+='<button type="button" data-act="len" data-len="'+l+'" aria-pressed="'+(cfg.len===l)+'">'+(l==='all'?'全部':l)+'</button>';
   });
@@ -402,7 +419,7 @@ function configPanel(){
   if(!can)h+='<span class="hint">這個玩法至少需要 '+md.min+' 個單字，請調整單元範圍。</span>';
   var hot=p.filter(function(x){return nb[keyOf(x)]}).length;
   if(hot&&cfg.mode!=='flash')h+='<span class="hint">錯題本裡有 '+hot+' 個字在這個範圍，出題時會更常出現。</span>';
-  h+='</div><div class="foot"><button class="btn text danger" type="button" data-act="clear">'+(clearArm?'再按一次，清空全部 '+bank.length+' 個單字':'清空題庫')+'</button></div>';
+  h+='</div><div class="foot"><button class="btn text danger" type="button" data-act="lv-reset">'+(lvArm?'再按一次，熟悉度歸零':'重設熟悉度')+'</button><button class="btn text danger" type="button" data-act="clear">'+(clearArm?'再按一次，清空全部 '+bank.length+' 個單字':'清空題庫')+'</button></div>';
   return h;
 }
 function setupView(){
@@ -670,6 +687,10 @@ document.addEventListener('click',function(e){
   var d=el.dataset;
   switch(d.act){
     case 'import-toggle':importOpen=!importOpen;notice=null;render();break;
+    case 'lv-reset':
+      if(!lvArm){lvArm=true;clearTimeout(lvTimer);lvTimer=setTimeout(function(){lvArm=false;if(screen==='setup')render()},4000);render()}
+      else{lvArm=false;clearTimeout(lvTimer);lv={};saveLv();render()}
+      break;
     case 'nb-open':screen='notebook';importOpen=false;notice=null;render();window.scrollTo(0,0);break;
     case 'nb-close':screen='setup';render();break;
     case 'nb-practice':
@@ -689,7 +710,7 @@ document.addEventListener('click',function(e){
     case 'start':notice=null;startFromSetup();break;
     case 'clear':
       if(!clearArm){clearArm=true;clearTimeout(clearTimer);clearTimer=setTimeout(function(){clearArm=false;if(screen==='setup')render()},4000);render()}
-      else{clearArm=false;clearTimeout(clearTimer);bank=[];nb={};saveNb();cfg.units=new Set();saveBank();importOpen=false;notice=null;render()}
+      else{clearArm=false;clearTimeout(clearTimer);bank=[];nb={};lv={};saveNb();saveLv();cfg.units=new Set();saveBank();importOpen=false;notice=null;render()}
       break;
     case 'quit':quit();break;
     case 'opt':answerChoice(+d.i);break;
@@ -739,7 +760,7 @@ document.addEventListener('drop',function(e){
   handleFile(f);
 });
 
-loadBank();loadNb();
+loadBank();loadNb();loadLv();
 render();
 })();
 </script>
